@@ -186,7 +186,10 @@ function M.generate_schemas()
     end
     total_jobs = #paths
 
-    local function run_next_schema(i)
+    local max_retries = 3
+
+    local function run_next_schema(i, retries)
+      retries = retries or 0
       current_job = i
 
       if i > total_jobs then
@@ -198,17 +201,20 @@ function M.generate_schemas()
       local path_api = paths[i]
       fetch_schema(path_api[1], path_api[2], function(res)
         if res then
-          run_next_schema(i + 1)
-        else
-          Log.debug("Retrying schema: " .. path_api[1])
+          run_next_schema(i + 1, 0)
+        elseif retries < max_retries then
+          Log.debug("Retrying schema (" .. (retries + 1) .. "/" .. max_retries .. "): " .. path_api[1])
           local timer = vim.loop.new_timer()
           timer:start(
             100,
             0,
             vim.schedule_wrap(function()
-              run_next_schema(i)
+              run_next_schema(i, retries + 1)
             end)
           )
+        else
+          Log.error("Skipping schema after " .. max_retries .. " retries: " .. path_api[1])
+          run_next_schema(i + 1, 0)
         end
       end)
     end
